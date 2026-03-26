@@ -1,0 +1,33 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Public read-only meta collection (schema docs) ──
+    match /_meta/{doc} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // ── User-owned data (strict per-user isolation) ──
+    // Top-level user document
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+
+      // All subcollections (missions, studySessions, oracleConversations,
+      // vaults, knowledgeGraphs, commandDockHistory, analyses, autoWeaveLog, etc.)
+      match /{collection}/{docId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+
+        // All nested subcollections (vault items, oracle messages, graph nodes/edges…)
+        match /{subCollection}/{subDocId} {
+          allow read, write: if request.auth != null && request.auth.uid == userId;
+
+          // Three levels deep (e.g. any future nesting)
+          match /{deepCollection}/{deepDocId} {
+            allow read, write: if request.auth != null && request.auth.uid == userId;
+          }
+        }
+      }
+    }
+  }
+}

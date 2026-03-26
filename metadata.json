@@ -1,0 +1,5 @@
+{
+  "name": "ScholarSync V2.0",
+  "description": "AI-native academic operating system with Agentic Mesh, Exam Oracle, and a 6-step visual learning loop.",
+  "requestFramePermissions": ["camera", "microphone"]
+}

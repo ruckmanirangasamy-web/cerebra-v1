@@ -1,0 +1,28 @@
+
+
+=== Missing index for calendarBlocks1 ===
+The query requires an index. You can create it here: https://console.firebase.google.com/v1/r/project/cerebra-17706/firestore/indexes?create_composite=ClRwcm9qZWN0cy9jZXJlYnJhLTE3NzA2L2RhdGFiYXNlcy8oZGVmYXVsdCkvY29sbGVjdGlvbkdyb3Vwcy9jYWxlbmRhckJsb2Nrcy9pbmRleGVzL18QARoICgRkYXRlEAEaDQoJc3RhcnRUaW1lEAEaDAoIX19uYW1lX18QAQ
+
+
+=== Missing index for calendarBlocks2 ===
+The query requires an index. You can create it here: https://console.firebase.google.com/v1/r/project/cerebra-17706/firestore/indexes?create_composite=ClRwcm9qZWN0cy9jZXJlYnJhLTE3NzA2L2RhdGFiYXNlcy8oZGVmYXVsdCkvY29sbGVjdGlvbkdyb3Vwcy9jYWxlbmRhckJsb2Nrcy9pbmRleGVzL18QARoNCgltaXNzaW9uSWQQARoNCglzdGFydFRpbWUQARoMCghfX25hbWVfXxAB
+
+
+=== Missing index for tasks ===
+The query requires an index. You can create it here: https://console.firebase.google.com/v1/r/project/cerebra-17706/firestore/indexes?create_composite=Cktwcm9qZWN0cy9jZXJlYnJhLTE3NzA2L2RhdGFiYXNlcy8oZGVmYXVsdCkvY29sbGVjdGlvbkdyb3Vwcy90YXNrcy9pbmRleGVzL18QARoNCgltaXNzaW9uSWQQARoNCgljcmVhdGVkQXQQAhoMCghfX25hbWVfXxAC
+
+
+=== Missing index for studySessions1 ===
+The query requires an index. You can create it here: https://console.firebase.google.com/v1/r/project/cerebra-17706/firestore/indexes?create_composite=ClNwcm9qZWN0cy9jZXJlYnJhLTE3NzA2L2RhdGFiYXNlcy8oZGVmYXVsdCkvY29sbGVjdGlvbkdyb3Vwcy9zdHVkeVNlc3Npb25zL2luZGV4ZXMvXxABGg0KCW1pc3Npb25JZBABGg0KCXN0YXJ0ZWRBdBACGgwKCF9fbmFtZV9fEAI
+
+
+=== Missing index for studySessions2 ===
+The query requires an index. You can create it here: https://console.firebase.google.com/v1/r/project/cerebra-17706/firestore/indexes?create_composite=ClNwcm9qZWN0cy9jZXJlYnJhLTE3NzA2L2RhdGFiYXNlcy8oZGVmYXVsdCkvY29sbGVjdGlvbkdyb3Vwcy9zdHVkeVNlc3Npb25zL2luZGV4ZXMvXxABGg0KCW1pc3Npb25JZBABGgsKB2VuZGVkQXQQAhoMCghfX25hbWVfXxAC
+
+
+=== Missing index for vaultItems ===
+The query requires an index. You can create it here: https://console.firebase.google.com/v1/r/project/cerebra-17706/firestore/indexes?create_composite=Cktwcm9qZWN0cy9jZXJlYnJhLTE3NzA2L2RhdGFiYXNlcy8oZGVmYXVsdCkvY29sbGVjdGlvbkdyb3Vwcy9pdGVtcy9pbmRleGVzL18QARoICgR0eXBlEAEaEAoMbGFzdEVkaXRlZEF0EAIaDAoIX19uYW1lX18QAg
+
+
+=== Missing index for oracleConversations ===
+The query requires an index. You can create it here: https://console.firebase.google.com/v1/r/project/cerebra-17706/firestore/indexes?create_composite=ClFwcm9qZWN0cy9jZXJlYnJhLTE3NzA2L2RhdGFiYXNlcy8oZGVmYXVsdCkvY29sbGVjdGlvbkdyb3Vwcy9jb21tYW5kRG9jay9pbmRleGVzL18QARoLCgdwZXJzb25hEAEaDQoJdXBkYXRlZEF0EAIaDAoIX19uYW1lX18QAg
