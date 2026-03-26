@@ -1,13 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  X, Clock, Play, Pause, Square, Plus, Trash2, CheckCircle2, 
-  Circle, ChevronDown, ChevronRight, Calendar, Flag, Tag, 
-  MessageSquare, List, Activity, Info, Save, Link, Paperclip, 
-  MoreHorizontal, PlayCircle
+  X, Clock, Play, Pause, Plus, Trash2, CheckCircle2, 
+  Circle, Calendar, Flag, List, MessageSquare, 
+  Paperclip, Link as LinkIcon, MoreHorizontal, Info
 } from 'lucide-react';
 import { format } from 'date-fns';
-import { KanbanTask, TaskStatus, TaskPriority, Subtask, Timelog } from '../services/scheduleTypes';
+import { KanbanTask, Timelog, BoardProperty, TaskStatus, TaskPriority } from '../services/scheduleTypes';
 import { updateTask, deleteTask } from '../services/scheduleService';
 import { cn } from '../lib/utils';
 
@@ -16,11 +15,26 @@ interface TaskDetailSidebarProps {
   isOpen: boolean;
   onClose: () => void;
   onUpdate?: (updatedTask: KanbanTask) => void;
+  boardProperties?: BoardProperty[];
+  columnName?: string;
 }
 
 type Tab = 'details' | 'subtasks' | 'activity';
 
-export default function TaskDetailSidebar({ task, isOpen, onClose, onUpdate }: TaskDetailSidebarProps) {
+const STATUS_OPTIONS: TaskStatus[] = ['Not Started', 'In Progress', 'Paused', 'Done'];
+const PROP_TYPES = ["text", "number", "dropdown", "link", "date"] as const;
+const PROP_ICONS: Record<string, string> = { text: "Aa", number: "#", dropdown: "☰", link: "🔗", date: "📅" };
+
+const genId = () => Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+
+const SC: Record<string, string> = {
+  "Not Started": "bg-slate-100 text-slate-500 border border-slate-200",
+  "In Progress": "bg-blue-100 text-blue-600 border border-blue-200",
+  "Paused": "bg-yellow-100 text-yellow-600 border border-yellow-200",
+  "Done": "bg-emerald-100 text-emerald-600 border border-emerald-200",
+};
+
+export default function TaskDetailSidebar({ task, isOpen, onClose, onUpdate, boardProperties = [], columnName = '—' }: TaskDetailSidebarProps) {
   const [activeTab, setActiveTab] = useState<Tab>('details');
   const [editedTask, setEditedTask] = useState<KanbanTask>({ ...task });
   
@@ -28,6 +42,18 @@ export default function TaskDetailSidebar({ task, isOpen, onClose, onUpdate }: T
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [elapsedTime, setElapsedTime] = useState(0); // in seconds
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  // Property creation state
+  const [showPropMenu, setShowPropMenu] = useState(false);
+  const [addingTaskProp, setAddingTaskProp] = useState<{type: string} | null>(null);
+  const [taskPropName, setTaskPropName] = useState("");
+  const propMenuRef = useRef<HTMLDivElement>(null);
+
+  // Links
+  const [addingLink, setAddingLink] = useState(false);
+  const [newLinkUrl, setNewLinkUrl] = useState("");
+  const [newLinkLabel, setNewLinkLabel] = useState("");
 
   useEffect(() => {
     setEditedTask({ ...task });
@@ -49,28 +75,41 @@ export default function TaskDetailSidebar({ task, isOpen, onClose, onUpdate }: T
     };
   }, [isTimerRunning]);
 
+  // Handle auto-save on close if timer is running and > 1 minute
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+       if (isTimerRunning && elapsedTime >= 60) {
+         handleStopTimer();
+       }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+       window.removeEventListener('beforeunload', handleBeforeUnload);
+       if (isTimerRunning && elapsedTime >= 60) {
+           handleStopTimer();
+       }
+    };
+  }, [isTimerRunning, elapsedTime]);
+
+  const handleStopTimer = () => {
+    if (elapsedTime >= 60) {
+      const newLog: Timelog = {
+        id: genId(),
+        date: new Date().toISOString(),
+        duration: elapsedTime
+      };
+      const updatedLogs = [...(editedTask.timelogs || []), newLog];
+      const newTotal = (editedTask.totalTime || 0) + elapsedTime;
+      handleUpdateField('timelogs', updatedLogs);
+      handleUpdateField('totalTime', newTotal);
+    }
+    setElapsedTime(0);
+    setIsTimerRunning(false);
+  };
+
   const handleToggleTimer = () => {
     if (isTimerRunning) {
-      // Pause/Stop: Log time
-      const newLog: Timelog = {
-        date: new Date().toISOString(),
-        duration: Math.floor(elapsedTime / 60) // Store in minutes
-      };
-      
-      const updatedLogs = [...(editedTask.timelogs || []), newLog];
-      const updatedTask = { 
-        ...editedTask, 
-        timelogs: updatedLogs,
-        actualDuration: (editedTask.actualDuration || 0) + newLog.duration
-      };
-      
-      setEditedTask(updatedTask);
-      updateTask(task.id, { 
-        timelogs: updatedLogs, 
-        actualDuration: updatedTask.actualDuration 
-      });
-      setElapsedTime(0);
-      setIsTimerRunning(false);
+      handleStopTimer();
     } else {
       setIsTimerRunning(true);
     }
@@ -83,6 +122,11 @@ export default function TaskDetailSidebar({ task, isOpen, onClose, onUpdate }: T
     return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const formatShortTime = (seconds: number) => {
+    const h = Math.floor(seconds/3600), m = Math.floor((seconds%3600)/60), sec = seconds%60;
+    return h > 0 ? `${h}h ${m}m` : m > 0 ? `${m}m ${sec}s` : `${sec}s`;
+  };
+
   const handleUpdateField = (field: keyof KanbanTask, value: any) => {
     const updated = { ...editedTask, [field]: value };
     setEditedTask(updated);
@@ -90,28 +134,29 @@ export default function TaskDetailSidebar({ task, isOpen, onClose, onUpdate }: T
     if (onUpdate) onUpdate(updated);
   };
 
-  const handleAddSubtask = (title: string) => {
-    if (!title.trim()) return;
-    const newSubtask: Subtask = {
-      id: `sub-${Date.now()}`,
-      title,
-      done: false
-    };
-    const updatedSubtasks = [...(editedTask.subtasks || []), newSubtask];
-    handleUpdateField('subtasks', updatedSubtasks);
+  const handleTaskPropertyChange = (propId: string, value: any) => {
+    const currentProps = editedTask.taskProperties || {};
+    const updatedProps = { ...currentProps, [propId]: value };
+    handleUpdateField('taskProperties', updatedProps);
   };
 
-  const toggleSubtask = (id: string) => {
-    const updatedSubtasks = editedTask.subtasks.map(st => 
-      st.id === id ? { ...st, done: !st.done } : st
-    );
-    handleUpdateField('subtasks', updatedSubtasks);
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const files = Array.from(e.target.files).map(f => ({
+        id: genId(),
+        name: f.name,
+        size: f.size,
+        url: URL.createObjectURL(f) // Mock URL for prototype
+      }));
+      handleUpdateField('attachments', [...(editedTask.attachments || []), ...files]);
+      e.target.value = '';
+    }
   };
 
-  const deleteSubtask = (id: string) => {
-    const updatedSubtasks = editedTask.subtasks.filter(st => st.id !== id);
-    handleUpdateField('subtasks', updatedSubtasks);
-  };
+  // Extract task-specific properties metadata
+  const taskPropMetas = Object.entries(editedTask.taskProperties || {})
+    .filter(([k]) => k.endsWith("_meta"))
+    .map(([k, v]) => ({ id: k.replace("_meta", ""), meta: v as any }));
 
   if (!isOpen) return null;
 
@@ -122,259 +167,305 @@ export default function TaskDetailSidebar({ task, isOpen, onClose, onUpdate }: T
         animate={{ x: 0, opacity: 1 }}
         exit={{ x: '100%', opacity: 0 }}
         transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-        className="fixed top-0 right-0 h-full w-[450px] bg-white border-l border-gray-200 z-[100] shadow-2xl flex flex-col"
+        className="fixed top-0 right-0 h-full w-[340px] bg-white border-l border-gray-200 z-[100] shadow-2xl flex flex-col font-sans"
       >
-        {/* Header - DUB Style */}
-        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between bg-white shrink-0">
-          <div className="flex items-center gap-3">
-             <div className="text-[10px] font-black uppercase tracking-widest text-indigo-600 bg-indigo-50 px-2 py-1 rounded-md">
-                {editedTask.subject}
-             </div>
-             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                {task.id.slice(0, 8)}
-             </span>
-          </div>
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-white shrink-0">
+          <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">Task Details</span>
           <div className="flex items-center gap-1">
-            <button className="p-2 hover:bg-gray-100 rounded-lg text-gray-400 transition-colors">
-              <MoreHorizontal size={18} />
+            <button className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 transition-colors">
+              <MoreHorizontal size={16} />
             </button>
-            <div className="w-px h-4 bg-gray-200 mx-1" />
-            <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors">
-              <X size={20} />
+            <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors">
+              <X size={18} />
             </button>
           </div>
         </div>
 
         {/* Title Area */}
-        <div className="px-6 pt-6 pb-2 shrink-0">
+        <div className="px-4 pt-4 pb-2 shrink-0">
            <input
              type="text"
              value={editedTask.title}
              onChange={(e) => handleUpdateField('title', e.target.value)}
-             className="w-full text-xl font-black text-gray-900 border-none outline-none focus:ring-0 p-0 placeholder:text-gray-300 leading-tight"
+             className="w-full text-base font-semibold text-gray-900 border-b-2 border-transparent focus:border-indigo-600 outline-none pb-1 transition-colors"
              placeholder="Task Title"
            />
         </div>
 
-        {/* Tabs */}
-        <div className="flex border-b border-gray-100 px-6 shrink-0 mt-4">
-          {(['details', 'subtasks', 'activity'] as Tab[]).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={cn(
-                "px-4 py-3 text-xs font-bold transition-colors relative uppercase tracking-widest",
-                activeTab === tab ? "text-indigo-600" : "text-gray-400 hover:text-gray-900"
-              )}
-            >
-              {tab}
-              {activeTab === tab && (
-                <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600" />
-              )}
-            </button>
-          ))}
+        {/* Group + Status */}
+        <div className="px-4 py-2 space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs w-20 text-gray-400 shrink-0">Group</span>
+            <div className="flex-1 flex justify-end">
+              <span className="text-xs font-medium px-2 py-1 rounded-lg bg-gray-100 text-gray-700">{columnName}</span>
+            </div>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs w-20 text-gray-400 shrink-0">Status</span>
+            <div className="flex-1 flex justify-end">
+              <select
+                value={editedTask.status}
+                onChange={(e) => handleUpdateField('status', e.target.value)}
+                className={cn(
+                  "text-xs px-2 py-1 rounded-lg font-medium outline-none cursor-pointer appearance-auto",
+                  SC[editedTask.status] || SC["Not Started"]
+                )}
+              >
+                {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+          </div>
         </div>
 
+        <div className="mx-4 my-2 border-t border-gray-100" />
+
         {/* Content Area */}
-        <div className="flex-1 overflow-y-auto custom-scrollbar bg-[#f8fafc]">
-          {activeTab === 'details' && (
-            <div className="p-6 space-y-6">
-              
-              {/* Properties Grid - DUB Style */}
-              <div className="grid grid-cols-[120px_1fr] gap-y-4 items-center text-sm">
-                <div className="text-gray-500 font-medium flex items-center gap-2">
-                  <Info size={14} /> Status
-                </div>
-                <div>
-                  <select
-                    value={editedTask.status}
-                    onChange={(e) => handleUpdateField('status', e.target.value)}
-                    className="bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-xs font-bold text-gray-700 outline-none focus:border-indigo-500 transition-colors shadow-sm"
-                  >
-                    <option value="Backlog">Backlog</option>
-                    <option value="Unstarted">Unstarted</option>
-                    <option value="In Progress">In Progress</option>
-                    <option value="Completed">Completed</option>
-                    <option value="Cancelled">Cancelled</option>
-                  </select>
-                </div>
+        <div className="flex-1 overflow-y-auto custom-scrollbar bg-white">
+            <div className="px-4 space-y-4 pb-6">
 
-                <div className="text-gray-500 font-medium flex items-center gap-2">
-                  <Flag size={14} /> Priority
+              {/* Schedule */}
+              <div className="space-y-2">
+                <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-2">Schedule</span>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs w-24 text-gray-400 shrink-0">Date</span>
+                  <div className="flex-1 flex justify-end">
+                    <input 
+                      type="date"
+                      value={editedTask.date || ''}
+                      onChange={(e) => handleUpdateField('date', e.target.value)}
+                      className="text-xs rounded-lg px-2 py-1 outline-none w-full border border-gray-200 text-gray-700 bg-gray-50 focus:bg-white focus:border-indigo-400 transition-colors"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <select
-                    value={editedTask.priority}
-                    onChange={(e) => handleUpdateField('priority', e.target.value)}
-                    className="bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-xs font-bold text-gray-700 outline-none focus:border-indigo-500 transition-colors shadow-sm"
-                  >
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                    <option value="critical">Critical</option>
-                  </select>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs w-24 text-gray-400 shrink-0">Start Time</span>
+                  <div className="flex-1 flex justify-end">
+                    <input 
+                      type="time"
+                      value={editedTask.startTime || ''}
+                      onChange={(e) => handleUpdateField('startTime', e.target.value)}
+                      className="text-xs rounded-lg px-2 py-1 outline-none w-full border border-gray-200 text-gray-700 bg-gray-50 focus:bg-white focus:border-indigo-400 transition-colors"
+                    />
+                  </div>
                 </div>
-
-                <div className="text-gray-500 font-medium flex items-center gap-2">
-                  <Calendar size={14} /> Due Date
-                </div>
-                <div>
-                   <button className="text-xs font-bold text-gray-700 bg-white border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50 transition-colors shadow-sm">
-                     {editedTask.dueDate ? format(editedTask.dueDate.seconds ? editedTask.dueDate.seconds * 1000 : editedTask.dueDate, 'PPP') : 'Set due date'}
-                   </button>
-                </div>
-
-                <div className="text-gray-500 font-medium flex items-center gap-2">
-                  <Clock size={14} /> Estimated
-                </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    value={editedTask.estimatedDuration}
-                    onChange={(e) => handleUpdateField('estimatedDuration', parseInt(e.target.value))}
-                    className="w-16 bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-xs font-bold text-gray-700 outline-none focus:border-indigo-500 transition-colors shadow-sm"
-                  />
-                  <span className="text-xs text-gray-500 font-medium">minutes</span>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs w-24 text-gray-400 shrink-0">End Time</span>
+                  <div className="flex-1 flex justify-end">
+                    <input 
+                      type="time"
+                      value={editedTask.endTime || ''}
+                      onChange={(e) => handleUpdateField('endTime', e.target.value)}
+                      className="text-xs rounded-lg px-2 py-1 outline-none w-full border border-gray-200 text-gray-700 bg-gray-50 focus:bg-white focus:border-indigo-400 transition-colors"
+                    />
+                  </div>
                 </div>
               </div>
+              
+              {/* Board Properties */}
+              {boardProperties.length > 0 && (
+                <div className="space-y-2">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-2">Board Properties</span>
+                  {boardProperties.map(prop => (
+                    <div key={prop.id} className="flex items-center justify-between gap-2">
+                      <span className="text-xs w-24 text-gray-400 shrink-0 truncate">{prop.name}</span>
+                      <div className="flex-1 flex justify-end">
+                         <PropInput 
+                           type={prop.type} 
+                           options={prop.options || []}
+                           value={editedTask.taskProperties?.[prop.id] || ""}
+                           onChange={(v) => handleTaskPropertyChange(prop.id, v)}
+                         />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
 
-              <div className="h-px bg-gray-200 w-full" />
+              {/* Task Properties */}
+              {taskPropMetas.length > 0 && (
+                <div className="space-y-2 mt-4">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-2">Task Properties</span>
+                  {taskPropMetas.map(({id, meta}) => (
+                    <div key={id} className="flex items-center justify-between gap-2">
+                      <span className="text-xs w-24 text-gray-400 shrink-0 truncate">{meta.name}</span>
+                      <div className="flex-1 flex justify-end">
+                         <PropInput 
+                           type={meta.type} 
+                           options={meta.options || []}
+                           value={editedTask.taskProperties?.[id] || ""}
+                           onChange={(v) => handleTaskPropertyChange(id, v)}
+                         />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Add Property Button */}
+              <div className="mt-2 relative" ref={propMenuRef}>
+                 <button onClick={() => setShowPropMenu(!showPropMenu)} className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors">
+                    <span className="text-base font-light">+</span> Add property
+                 </button>
+                 {showPropMenu && (
+                    <div className="absolute top-full left-0 mt-1 rounded-xl shadow-lg z-30 overflow-hidden w-40 bg-white border border-gray-200">
+                       {PROP_TYPES.map(t => (
+                         <button key={t} onClick={() => { setAddingTaskProp({type: t}); setShowPropMenu(false); }}
+                           className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-gray-50 text-gray-700 capitalize">
+                           <span className="font-mono text-xs w-4 text-center text-gray-400">{PROP_ICONS[t]}</span>{t}
+                         </button>
+                       ))}
+                    </div>
+                 )}
+              </div>
+
+              {addingTaskProp && (
+                 <div className="mt-2 p-2.5 rounded-xl space-y-2 bg-gray-50 border border-gray-200">
+                    <input className="w-full text-xs rounded-lg px-2 py-1.5 outline-none border border-gray-200 text-gray-700"
+                      placeholder="Property name" value={taskPropName} onChange={e => setTaskPropName(e.target.value)} autoFocus />
+                    <div className="flex gap-2">
+                      <button onClick={() => {
+                        if (taskPropName.trim()) {
+                          const id = genId();
+                          const updatedProps = {
+                             ...editedTask.taskProperties,
+                             [`${id}_meta`]: { name: taskPropName.trim(), type: addingTaskProp.type },
+                             [id]: ""
+                          };
+                          handleUpdateField('taskProperties', updatedProps);
+                          setAddingTaskProp(null);
+                          setTaskPropName("");
+                        }
+                      }} className="px-2.5 py-1 rounded-lg text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700">Save</button>
+                      <button onClick={() => setAddingTaskProp(null)} className="text-xs text-gray-400 hover:text-gray-600">Cancel</button>
+                    </div>
+                 </div>
+              )}
+
+              <div className="my-4 border-t border-gray-100" />
 
               {/* Description */}
-              <div className="space-y-3">
-                 <h3 className="text-xs font-bold text-gray-900 uppercase tracking-widest flex items-center gap-2">
-                    <List size={14} className="text-gray-400" /> Description
-                 </h3>
+              <div>
+                 <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-2">Description</span>
                  <textarea
-                   value={editedTask.notes || ''}
-                   onChange={(e) => handleUpdateField('notes', e.target.value)}
-                   className="w-full bg-white border border-gray-200 rounded-xl p-4 text-sm text-gray-700 outline-none focus:border-indigo-500 transition-all shadow-sm resize-none min-h-[120px] placeholder:text-gray-300"
-                   placeholder="Add a description, notes, or links..."
+                   value={editedTask.description || ''}
+                   onChange={(e) => handleUpdateField('description', e.target.value)}
+                   className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-sm text-gray-700 outline-none focus:border-indigo-500 transition-all resize-none min-h-[80px] placeholder:text-gray-400"
+                   placeholder="Add a description..."
                  />
               </div>
 
-              {/* Timer Section */}
-              <div className="p-5 bg-white border border-indigo-100 rounded-2xl shadow-sm relative overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-br from-indigo-50/50 to-purple-50/50 pointer-events-none" />
-                <div className="relative flex items-center justify-between">
-                   <div>
-                      <div className="flex items-center gap-2 text-indigo-600 mb-1">
-                        <PlayCircle size={16} />
-                        <span className="text-xs font-bold uppercase tracking-widest">Time Tracker</span>
-                      </div>
-                      <div className="text-3xl font-black text-gray-900 tracking-tighter">
-                         {formatTime(elapsedTime)}
-                      </div>
-                   </div>
-                   
-                   <button
-                     onClick={handleToggleTimer}
-                     className={cn(
-                       "flex items-center justify-center w-12 h-12 rounded-xl transition-all shadow-md",
-                       isTimerRunning 
-                         ? "bg-rose-500 text-white shadow-rose-500/20 hover:bg-rose-600" 
-                         : "bg-indigo-600 text-white shadow-indigo-600/20 hover:bg-indigo-700"
-                     )}
-                   >
-                     {isTimerRunning ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" className="ml-1" />}
+              <div className="my-4 border-t border-gray-100" />
+
+              {/* Attachments */}
+              <div>
+                 <div className="flex items-center justify-between mb-2">
+                   <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 block">Attachments</span>
+                   <button onClick={() => fileRef.current?.click()} className="text-xs font-medium text-indigo-600">+ Add</button>
+                 </div>
+                 <input ref={fileRef} type="file" multiple className="hidden" onChange={handleFileUpload}/>
+                 {!(editedTask.attachments || []).length && (
+                   <button onClick={() => fileRef.current?.click()} className="w-full rounded-xl py-3 text-xs text-center border-2 border-dashed border-gray-200 text-gray-400 hover:border-indigo-300 transition-all">
+                     Drop files or click to attach
                    </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'subtasks' && (
-            <div className="p-6 space-y-6">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-bold text-gray-900 uppercase tracking-widest">Checklist</h3>
-                <span className="text-xs font-bold text-gray-500 bg-gray-200 px-2 py-0.5 rounded-full">
-                  {editedTask.subtasks?.filter(s => s.done).length || 0} / {editedTask.subtasks?.length || 0}
-                </span>
+                 )}
+                 {(editedTask.attachments || []).map(att => (
+                   <div key={att.id} className="flex items-center gap-2 rounded-lg px-2.5 py-2 mb-1 bg-gray-50 border border-gray-100">
+                     <Paperclip size={14} className="text-gray-400 shrink-0" />
+                     <span className="text-xs truncate flex-1 text-gray-700">{att.name}</span>
+                     <button onClick={() => handleUpdateField('attachments', editedTask.attachments?.filter(a => a.id !== att.id))} className="text-xs text-rose-500 hover:text-rose-600 shrink-0"><X size={14}/></button>
+                   </div>
+                 ))}
               </div>
 
-              <div className="space-y-2">
-                {editedTask.subtasks?.map((st) => (
-                  <div key={st.id} className="group flex items-center gap-3 p-3 rounded-xl bg-white border border-gray-100 shadow-sm hover:border-indigo-100 transition-colors">
-                    <button 
-                      onClick={() => toggleSubtask(st.id)}
-                      className={cn(
-                        "transition-colors",
-                        st.done ? "text-emerald-500" : "text-gray-300 hover:text-indigo-500"
-                      )}
-                    >
-                      {st.done ? <CheckCircle2 size={20} /> : <Circle size={20} />}
-                    </button>
-                    <span className={cn(
-                      "flex-1 text-sm font-medium transition-all",
-                      st.done ? "text-gray-400 line-through" : "text-gray-700"
-                    )}>
-                      {st.title}
-                    </span>
-                    <button 
-                      onClick={() => deleteSubtask(st.id)}
-                      className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-rose-50 hover:text-rose-500 rounded-lg transition-all text-gray-400"
-                    >
-                      <Trash2 size={16} />
-                    </button>
+              <div className="my-4 border-t border-gray-100" />
+
+              {/* Links */}
+              <div>
+                 <div className="flex items-center justify-between mb-2">
+                   <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 block">Links</span>
+                   <button onClick={() => setAddingLink(!addingLink)} className="text-xs font-medium text-indigo-600">+ Add</button>
+                 </div>
+                 {addingLink && (
+                   <div className="mb-3 space-y-2">
+                     <input className="w-full text-xs rounded-lg px-2.5 py-1.5 outline-none border border-gray-200" placeholder="https://..." value={newLinkUrl} onChange={e => setNewLinkUrl(e.target.value)} />
+                     <input className="w-full text-xs rounded-lg px-2.5 py-1.5 outline-none border border-gray-200" placeholder="Label (optional)" value={newLinkLabel} onChange={e => setNewLinkLabel(e.target.value)} />
+                     <div className="flex gap-2">
+                       <button onClick={() => {
+                         if (newLinkUrl.trim()) {
+                           const newLink = { id: genId(), url: newLinkUrl, label: newLinkLabel || newLinkUrl };
+                           handleUpdateField('links', [...(editedTask.links || []), newLink]);
+                           setNewLinkUrl(""); setNewLinkLabel(""); setAddingLink(false);
+                         }
+                       }} className="px-2.5 py-1 rounded-lg text-xs font-medium text-white bg-indigo-600">Add</button>
+                       <button onClick={() => setAddingLink(false)} className="text-xs text-gray-400">Cancel</button>
+                     </div>
+                   </div>
+                 )}
+                 {(editedTask.links || []).map(link => (
+                   <div key={link.id} className="flex items-center gap-2 rounded-lg px-2.5 py-2 mb-1 bg-gray-50 border border-gray-100">
+                     <LinkIcon size={14} className="text-gray-400 shrink-0" />
+                     <a href={link.url} target="_blank" rel="noopener noreferrer" className="text-xs truncate flex-1 text-indigo-600 hover:underline">{link.label}</a>
+                     <button onClick={() => handleUpdateField('links', editedTask.links?.filter(l => l.id !== link.id))} className="text-xs text-rose-500 hover:text-rose-600 shrink-0"><X size={14}/></button>
+                   </div>
+                 ))}
+              </div>
+
+              <div className="my-4 border-t border-gray-100" />
+
+              {/* Time Log */}
+              <div>
+                <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-2">Time Log</span>
+                <div className="rounded-xl p-3 mt-2 text-center bg-indigo-50/50 border border-indigo-100">
+                  <div className="text-2xl font-mono font-bold mb-2 text-gray-900 tracking-wider">
+                    {formatTime(elapsedTime)}
                   </div>
-                ))}
-              </div>
-
-              <div className="mt-4 relative">
-                <Plus className="absolute left-3 top-1/2 -translate-y-1/2 text-indigo-500" size={18} />
-                <input
-                  type="text"
-                  placeholder="Add a new sub-task..."
-                  className="w-full bg-indigo-50/50 border border-indigo-100 rounded-xl py-3 pl-10 pr-4 text-sm font-bold text-gray-900 outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20 transition-all placeholder:text-indigo-300 placeholder:font-medium"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      handleAddSubtask(e.currentTarget.value);
-                      e.currentTarget.value = '';
-                    }
-                  }}
-                />
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'activity' && (
-            <div className="p-6">
-              <div className="flex flex-col items-center justify-center h-64 text-center space-y-4">
-                <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center border border-gray-200">
-                  <MessageSquare size={24} className="text-gray-400" />
+                  {!isTimerRunning ? (
+                    <button onClick={handleToggleTimer} className="px-5 py-1.5 rounded-lg text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 transition-all shadow-sm">
+                      ▶ Start
+                    </button>
+                  ) : (
+                    <button onClick={handleToggleTimer} className="px-5 py-1.5 rounded-lg text-xs font-semibold text-white bg-rose-500 hover:bg-rose-600 transition-all shadow-sm">
+                      ■ Stop
+                    </button>
+                  )}
+                  {isTimerRunning && <p className="text-[10px] mt-2 text-indigo-500 font-medium">Auto-saves &gt; 1m. Stops on close.</p>}
                 </div>
-                <div>
-                  <h4 className="text-sm font-bold text-gray-900">No Activity Yet</h4>
-                  <p className="text-xs font-medium text-gray-500 mt-1 max-w-[200px] mx-auto">Comments and status changes will appear here.</p>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
 
-        {/* Footer Actions */}
-        <div className="p-4 bg-white border-t border-gray-100 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-2">
-            <button className="p-2 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors">
-              <Paperclip size={18} />
-            </button>
-            <button className="p-2 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors">
-              <Link size={18} />
-            </button>
-          </div>
-          <button 
-            onClick={() => {
-              if (window.confirm('Are you sure you want to delete this task?')) {
-                deleteTask(task.id);
-                onClose();
-              }
-            }}
-            className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
-          >
-            <Trash2 size={18} />
-          </button>
+                {(editedTask.timelogs || []).length > 0 && (
+                  <div className="mt-3 space-y-1">
+                    {editedTask.timelogs?.map((log, i) => (
+                      <div key={log.id} className="flex justify-between items-center rounded-lg px-2.5 py-1.5 text-xs bg-gray-50 border border-gray-100">
+                        <span className="text-gray-500">Session {i+1}</span>
+                        <span className="font-medium text-gray-700">{formatShortTime(log.duration)}</span>
+                      </div>
+                    ))}
+                    <div className="flex justify-between items-center rounded-lg px-2.5 py-1.5 text-xs font-semibold bg-indigo-50 border border-indigo-100 mt-2">
+                      <span className="text-indigo-700">Total</span>
+                      <span className="text-indigo-600">{formatShortTime(editedTask.totalTime || 0)}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+            </div>
         </div>
       </motion.div>
     </AnimatePresence>
   );
+}
+
+function PropInput({ type, value, options = [], onChange }: any) {
+  const cls = "text-xs rounded-lg px-2 py-1 outline-none w-full border border-gray-200 text-gray-700 bg-gray-50 focus:bg-white focus:border-indigo-400 transition-colors";
+  if (type === "text") return <input type="text" className={cls} value={value} onChange={e => onChange(e.target.value)} />;
+  if (type === "number") return <input type="number" className={cls} value={value} onChange={e => onChange(e.target.value)} />;
+  if (type === "link") return <input type="url" className={cls} value={value} placeholder="https://…" onChange={e => onChange(e.target.value)} />;
+  if (type === "date") return <input type="date" className={cls} value={value} onChange={e => onChange(e.target.value)} />;
+  if (type === "dropdown") return (
+    <select className={cn(cls, "appearance-auto")} value={value} onChange={e => onChange(e.target.value)}>
+      <option value="">Select…</option>
+      {options.map((o: string) => <option key={o} value={o}>{o}</option>)}
+    </select>
+  );
+  return null;
 }

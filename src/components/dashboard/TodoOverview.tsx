@@ -26,7 +26,7 @@ export default function TodoOverview() {
             // and not done
             const urgent = data.filter(t =>
                 (t.status === 'In Progress' || t.priority === 'high' || t.priority === 'critical') &&
-                t.status !== 'Completed'
+                t.status !== 'Done'
             );
             setTasks(urgent);
             setLoading(false);
@@ -36,7 +36,7 @@ export default function TodoOverview() {
 
     const markAsDone = async (id: string) => {
         try {
-            await updateTask(id, { status: "Completed", completedAt: new Date() });
+            await updateTask(id, { status: "Done", completedAt: new Date() });
         } catch (err) {
             console.error("Failed to update task:", err);
         }

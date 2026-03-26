@@ -397,7 +397,7 @@ export default function Dashboard() {
   // Derive analytics from Firestore data
   useEffect(() => {
     if (missions.length === 0 && tasks.length === 0) return;
-    const doneTasks  = tasks.filter(t => t.status === "Completed").length;
+    const doneTasks  = tasks.filter(t => t.status === "Done").length;
     const totalTasks = tasks.length;
     const recall     = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 42;
     const pyq        = missions.length > 0 ? Math.round(missions.reduce((a, m) => a + m.masteryPercent, 0) / missions.length) : 63;
@@ -412,7 +412,7 @@ export default function Dashboard() {
       return 0;
     });
 
-  const urgentTasks = tasks.filter(t => (t.status === "In Progress" || t.priority === "high" || t.priority === "critical") && t.status !== "Completed");
+  const urgentTasks = tasks.filter(t => (t.status === "In Progress" || t.priority === "high" || t.priority === "critical") && t.status !== "Done");
   const avgMastery  = missions.length > 0
     ? Math.round(missions.reduce((a, m) => a + m.masteryPercent, 0) / missions.length) : 0;
   const today       = new Date();
@@ -433,7 +433,7 @@ export default function Dashboard() {
       topic: "Unassigned",
       missionId: null,
       priority: 'high',
-      status: 'Unstarted',
+      status: 'Not Started',
       dueDate: null,
       estimatedDuration: 60,
       actualDuration: 0,
@@ -458,7 +458,7 @@ export default function Dashboard() {
   };
 
   const handleToggleTask = async (taskId: string) => {
-    await updateTask(taskId, { status: "Completed", completedAt: new Date().toISOString() });
+    await updateTask(taskId, { status: "Done", completedAt: new Date().toISOString() });
   };
 
   return (

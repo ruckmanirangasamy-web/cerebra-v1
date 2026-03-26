@@ -233,7 +233,7 @@ export default function Learn() {
     if (!user?.uid) return;
     await updateTask(taskId, {
       completedAt: completed ? new Date().toISOString() : null,
-      status: completed ? 'Completed' : 'In Progress'
+      status: completed ? 'Done' : 'In Progress'
     });
   };
 

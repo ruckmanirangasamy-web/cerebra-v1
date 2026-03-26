@@ -1,2 +1,5 @@
-{ \
-projects\: { \default\: \cerebra-17706\ } }
+{
+  "projects": {
+    "default": "cerebra-17706"
+  }
+}

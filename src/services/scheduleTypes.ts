@@ -22,7 +22,7 @@ export interface CalendarBlock {
 }
 
 export type TaskPriority = 'critical' | 'high' | 'medium' | 'low';
-export type TaskStatus = 'Backlog' | 'Unstarted' | 'In Progress' | 'Completed' | 'Cancelled';
+export type TaskStatus = 'Not Started' | 'In Progress' | 'Paused' | 'Done';
 
 export interface TaskLabel {
     id: string;
@@ -43,6 +43,13 @@ export interface TaskPropertyToggle {
     visible: boolean;
 }
 
+export interface BoardProperty {
+    id: string;
+    name: string;
+    type: 'text' | 'number' | 'dropdown' | 'link' | 'date';
+    options?: string[];
+}
+
 export interface KanbanBoard {
     id: string;
     title: string;
@@ -51,6 +58,7 @@ export interface KanbanBoard {
     displayProperties?: Record<string, boolean>;
     filters?: Record<string, any>;
     columns?: CustomColumn[]; // Array of custom columns specific to this board
+    properties?: BoardProperty[];
 }
 
 export interface Subtask {
@@ -60,8 +68,22 @@ export interface Subtask {
 }
 
 export interface Timelog {
+    id: string;
     date: string; // ISO String
-    duration: number; // minutes or seconds
+    duration: number; // seconds
+}
+
+export interface TaskAttachment {
+    id: string;
+    name: string;
+    url: string;
+    size?: number;
+}
+
+export interface TaskLink {
+    id: string;
+    url: string;
+    label: string;
 }
 
 export interface KanbanTask {
@@ -95,10 +117,15 @@ export interface KanbanTask {
     mode?: 'sniper' | 'scholar';
     subjectColour: string;
     createdFrom: 'mission' | 'quickTodo' | 'manual' | 'agent';
-    customProperties?: Record<string, any>;
+    customProperties?: Record<string, any>; // legacy
+    taskProperties?: Record<string, any>;
     dependencies?: string[];
     timelogs?: Timelog[];
+    totalTime?: number;
+    attachments?: TaskAttachment[];
+    links?: TaskLink[];
     notes?: string;
+    description?: string;
     boardIds?: string[];
 }
 
